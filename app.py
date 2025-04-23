@@ -163,7 +163,7 @@ def get_download_data(sticker_url: str, sticker_type: str, index: int) -> dict |
 
 
 # --- Streamlit App ---
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", page_title="Line Sticker Downloader", page_icon="./src/icon.png")
 st.title("🚀 Line Sticker Downloader 🚀")
 
 # --- 初始化 Session State ---
