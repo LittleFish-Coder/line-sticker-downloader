@@ -79,7 +79,7 @@ def get_sticker_info(store_url: str) -> list[dict]:
 
 
 def convert_apng_to_gif(image_bytes: bytes) -> bytes | None:
-    """將 APNG (從 bytes 輸入) 轉換為 GIF (輸出 bytes)。"""
+    """將 APNG (從 bytes 輸入) 轉換為 GIF (輸出 bytes)，強制無限循環。"""
     try:
         apng = Image.open(io.BytesIO(image_bytes))
         frames = []
@@ -88,29 +88,40 @@ def convert_apng_to_gif(image_bytes: bytes) -> bytes | None:
 
         # 提取所有幀
         for frame in ImageSequence.Iterator(apng):
+            # 確保幀是 RGBA 以保留透明度
+            # 創建一個新的 RGBA 圖像並粘貼當前幀，確保處理一致性
             rgba_frame = Image.new("RGBA", frame.size)
-            rgba_frame.paste(frame.convert("RGBA"), (0, 0), frame.convert("RGBA"))
+            # 使用 frame.convert('RGBA') 作為 mask，確保透明區域被正確處理
+            rgba_frame.paste(frame.convert("RGBA"), (0,0), frame.convert("RGBA"))
             frames.append(rgba_frame)
 
         if len(frames) <= 1:
             return None # 只有一幀
 
         gif_buffer = io.BytesIO()
-        frames[0].save(
-            gif_buffer,
-            format='GIF',
-            save_all=True,
-            append_images=frames[1:],
-            optimize=False,
-            duration=apng.info.get('duration', 100),
-            loop=apng.info.get('loop', 0),
-            transparency=apng.info.get('transparency', None),
-            disposal=2
-        )
+
+        # 準備儲存選項
+        save_kwargs = {
+            "format": 'GIF',
+            "save_all": True,           # 儲存所有幀
+            "append_images": frames[1:], # 將後續幀附加進來
+            "optimize": False,          # 可以設為 True 嘗試優化大小，但可能稍慢
+            "duration": apng.info.get('duration', 100), # 使用原始 APNG 的幀持續時間，預設 100ms
+            # Pillow 通常能自動處理 RGBA 幀的透明度，無需手動設置 transparency 參數
+            "disposal": 2,              # 指定如何處理前一幀區域 (2=恢復背景，對透明背景效果較好)
+            "loop": 0                   # <--- *** 強制設為 0，代表無限循環 ***
+        }
+
+        # 執行儲存
+        frames[0].save(gif_buffer, **save_kwargs)
+
         gif_buffer.seek(0)
         return gif_buffer.getvalue()
     except Exception as e:
+        # 增加錯誤訊息的詳細程度
         st.error(f"APNG 轉換 GIF 失敗: {e}", icon="⚠️")
+        # import traceback # Debugging: 取消註解以查看完整錯誤訊息
+        # st.error(traceback.format_exc())
         return None
 
 # 使用 cache_data 來緩存下載和轉換的結果，減少重複計算
@@ -166,7 +177,7 @@ if 'last_loaded_url' not in st.session_state:
 with st.expander("📖 使用說明", expanded=True):
     st.markdown(
         """
-        1. 前往 [Line 貼圖商店](https://store.line.me/stickershop/home)。
+        1. 前往 [LINE 貼圖商店](https://store.line.me/stickershop/home)。
         2. 找到你喜歡的貼圖，複製其網址。
         3. 將網址貼到下方的輸入框，點擊 **開始抓取貼圖**。
         4. 預覽貼圖並下載靜態或動畫版本（動畫將嘗試轉換為 GIF）。
@@ -175,7 +186,7 @@ with st.expander("📖 使用說明", expanded=True):
 
 # --- 輸入和抓取按鈕 ---
 default_url = "https://store.line.me/stickershop/product/30397660/"
-user_url = st.text_input("輸入 Line 貼圖網址:", key="sticker_url_input", placeholder=default_url)
+user_url = st.text_input("輸入 Line 貼圖網址:", key="sticker_url_input", placeholder="例如: https://store.line.me/stickershop/product/30397660/", value=default_url)
 
 if st.button("開始抓取貼圖", key="fetch_button"):
     if user_url:
@@ -243,4 +254,4 @@ elif st.session_state.last_loaded_url and st.session_state.sticker_info_list is 
 
 
 st.markdown("---")
-st.markdown("Created with Streamlit by 程式夥伴")
+st.markdown("Created with Streamlit by Gemini")
